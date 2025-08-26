@@ -11,8 +11,11 @@ class Settings(BaseSettings):
     MARKET_API_TOKEN: str = ""
     
     TG_BOT_API_TOKEN: str = ""
+    URI_SQLLITE: str = "database.db"
     
-    PERCENT_OF_SELLER: int = 20
+    @property
+    def DATABASE_SQLLITE_URL(self):
+        return f"sqlite+aiosqlite:///{self.URI_SQLLITE}"
 
 
 

@@ -1,15 +1,14 @@
 from config import settings
 from datetime import datetime
 from typing import Any
+from database.repositories.users import check_user_share
 import asyncio
 import aiohttp
 import re
 
 
-
 URL = settings.MARKET_API_URL
 TOKEN = settings.MARKET_API_TOKEN
-PERCENT = settings.PERCENT_OF_SELLER*0.01
 
 
 async def extract_ids(links: list[str]) -> list[int]:
@@ -37,14 +36,15 @@ async def fetch_data(session: aiohttp.ClientSession, id: int) -> Any:
     
     async with session.get(f"{URL}{id}", headers=headers) as response:
         if response.status == 200:
-            return await response.json()
+            return await response.json(), "success"
         else:
-            print(f"Ошибка с {id}")
-            return None
+            return None, "error"
 
 
-async def create_report(links):
+async def create_report(links, user_id):
     ids = await extract_ids(links)
+    share_percent = await check_user_share(user_id)
+    percent = share_percent if share_percent is not None else 100
     
     accounts_count: int = 0                     # Accounts counter
     sold_accounts_count: int = 0                # Sold accounts counter
@@ -64,14 +64,14 @@ async def create_report(links):
         for id in ids:
             accounts_count += 1
             
-            response = await fetch_data(session, id)
-            if response is not None:
+            response, success = await fetch_data(session, id)
+            if response is not None and success == "success":
                 try:
                     item = response["item"]
                     title: str = item["title"]
                     price: int = int(float(item["price"]))
                     price_after_comission = price*0.97
-                    share_from_price = price*0.97*PERCENT
+                    share_from_price = price_after_comission*percent*0.01
                     
                     summ_after_commission += price_after_comission
                     summ_share_from_price += share_from_price
@@ -93,15 +93,19 @@ async def create_report(links):
                     await asyncio.sleep(0.2)
 
                 except:
-                    failed_accounts.append("https://lzt.market/{id}")
+                    failed_accounts.append(f"https://lzt.market/{id}")
                     print(f"Произошла ошибка при проверке: https://lzt.market/{id}")
+            else:
+                failed_accounts.append(f"https://lzt.market/{id}")
+                print(f"Произошла ошибка при проверке: https://lzt.market/{id}")
+
         
         # REPORT OUTPUT START
         output_sold_accounts = "\n".join(sold_accounts)
         output_not_sold_accounts = "\n".join(not_sold_accounts)
         output_failed_accounts = "\n".join(failed_accounts)
 
-        output: str = f"""ОТЧЕТ {datetime.now()}
+        output: str = f"""ОТЧЕТ {datetime.now().strftime("%d-%m-%Y %H:%M")} (GMT+3)
 
 - Всего аккаунтов: {accounts_count} | Сумма: {summ_after_commission:.2f} | Доля: {summ_share_from_price:.2f} | Скока скинуть: {summ_after_commission-summ_share_from_price:.2f}
 - Продано аккаунтов: {sold_accounts_count} | Сумма: {summ_sold_accounts:.2f} | Доля: {summ_share_sold_accounts:.2f} | Скока скинуть: {summ_sold_accounts-summ_share_sold_accounts:.2f}
@@ -115,6 +119,9 @@ async def create_report(links):
 
 НЕПРОВЕРЕННЫЕ(ОШИБКИ):
 {output_failed_accounts}
+
+
+@LztMarketPriceBot
 """
         
         return output
