@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     MARKET_API_URL: str = "https://prod-api.lzt.market/"
     MARKET_API_TOKEN: str = ""
     
+    TG_BOT_API_TOKEN: str = ""
+    
     PERCENT_OF_SELLER: int = 20
 
 
