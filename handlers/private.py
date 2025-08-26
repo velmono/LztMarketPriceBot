@@ -17,13 +17,13 @@ router.message.filter(F.chat.type.in_([ChatType.PRIVATE]))
 
 
 class States(StatesGroup):
-    StartState = State()
     CheckState = State()
     PercentState = State()
 
 
 @router.message(Command("start", prefix="/!"))
 async def start_message(message: Message, state: FSMContext):
+    
     links_button = KeyboardButton(text="Проверить ссылки")
     config_button = KeyboardButton(text="Конфигурация")
     
@@ -31,8 +31,14 @@ async def start_message(message: Message, state: FSMContext):
     
     if message.from_user is not None:
         await add(message.from_user.id) if not await check_user(message.from_user.id) else None
+    answer_text = """Бот для проверки стоимости товаров на LZT MARKET.
 
-    await message.answer(text="Привет",
+Функционал:
+Проверка ссылок - по ссылкам узнать стоимость и долю аккаунтов
+Конфигурация - настройка вашего процента от суммы аккаунтов
+
+"""
+    await message.answer(text=answer_text,
                      reply_markup=keyboard
                      )
 
@@ -56,7 +62,12 @@ async def answer_links(message: Message, state: FSMContext):
     
     
     await state.set_state(States.CheckState)
-    await message.answer("Отправь ссылки/ID\n(Каждая ссылка/каждый ID с новой строки)",
+    
+    answer_text = """💾Отправьте ссылки/ID
+(Каждая ссылка/каждый ID с новой строки)
+
+"""
+    await message.answer(text=answer_text,
                          reply_markup=keyboard)
 
 
@@ -72,7 +83,7 @@ async def check_links(message: Message, state: FSMContext):
     else:
         await message.answer("Отправьте ссылки корректно")
         await state.set_state(States.CheckState)
-    
+
 
 @router.message(F.text == "Конфигурация")
 async def configure(message: Message, state: FSMContext):
@@ -80,16 +91,34 @@ async def configure(message: Message, state: FSMContext):
     keyboard = ReplyKeyboardMarkup(keyboard=[[cancel_button]],resize_keyboard=True)
     
     await state.set_state(States.PercentState)
-    await message.answer("Отправь свой процент от всей суммы(Например: 20)",
+    await message.answer("Отправь Ваш процент от всей суммы(Например: 20)",
                          reply_markup=keyboard)
 
 
 @router.message(States.PercentState)
 async def configure_share(message: Message, state: FSMContext):
+    
     if message.from_user is None:
         await message.answer("Пользователь не найден")
-    else:
-        await change_share(message.from_user.id, int(message.text.strip('%,.!-+'))) if message.text is not None else None
-        await message.answer(f"Процент изменен на {message.text.strip('%,.!-+')}") if message.text is not None else None
+        return
+    
+    if message.text is None:
+        await message.answer("Корректно отправьте Ваш процент(Например: 20)")
+        return
+            
+    raw_text = message.text.strip('%,.!-+')
+    
+    try:
+        percent = int(raw_text)
+    except ValueError:
+        await message.answer("Корректно отправьте Ваш процент(Например: 20)")
+        return
+    
+    if not (0 <= percent <= 100):
+        await message.answer("Процент должен быть в диапазоне от 0 до 100")
+        return
+    
+    await change_share(message.from_user.id, percent)
+    await message.answer(f"Процент изменен на {percent}")
     await state.clear()
     await start_message(message, state)
